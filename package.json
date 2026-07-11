@@ -1,0 +1,16 @@
+{
+  "name": "yullyang-meal-widget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "율량중학교 오늘의 급식 위젯",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "devDependencies": {
+    "vercel": "^41.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

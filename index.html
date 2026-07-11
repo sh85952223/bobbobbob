@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#9a83da" />
+  <meta name="description" content="율량중학교 오늘의 급식을 확인하는 파스텔 위젯" />
+  <title>율량중 오늘의 급식</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+  <div class="sparkles" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <main class="page-shell">
+    <section class="meal-widget" aria-labelledby="page-title">
+      <header class="hero">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 96 72" role="img">
+            <defs>
+              <linearGradient id="whaleGradient" x1="0" x2="1" y1="0" y2="1">
+                <stop offset="0" stop-color="#cfbdf7" />
+                <stop offset="1" stop-color="#8f7bd6" />
+              </linearGradient>
+            </defs>
+            <path d="M22 40c5-17 22-26 39-21 9 3 15 8 18 15 2 5 1 10-3 14-7 8-23 10-37 5-7-2-13-7-17-13Z" fill="url(#whaleGradient)" />
+            <path d="M69 22c5-8 12-10 20-7-2 7-7 12-15 14" fill="#bba7ed" />
+            <path d="M76 27c8-2 14 1 18 8-7 4-14 3-20-2" fill="#d9cbfa" />
+            <circle cx="60" cy="34" r="2.3" fill="#433b63" />
+            <path d="M21 39c-8-2-14 1-18 8 8 4 15 3 21-2" fill="#c6b4f2" />
+            <path d="M49 56c2 7 7 11 14 12-1-6-4-11-9-14" fill="#a996e5" />
+            <path d="M62 19c1-7 4-11 9-14 2 6 1 11-3 16" fill="#d9cbfa" />
+          </svg>
+        </div>
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="status-dot"></span> 오늘도 맛있는 한 끼</p>
+          <h1 id="page-title">율량중학교 급식</h1>
+          <p class="subtitle">날짜를 눌러 이번 주 식단을 살펴보세요.</p>
+        </div>
+        <button class="refresh-button" id="refreshButton" type="button" aria-label="급식 정보 새로고침" title="새로고침">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" /></svg>
+        </button>
+      </header>
+
+      <div class="date-toolbar">
+        <button class="round-button" id="previousDay" type="button" aria-label="이전 날짜">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <button class="date-display" id="dateDisplay" type="button" aria-label="날짜 선택">
+          <span id="dateHeadline">날짜 불러오는 중</span>
+          <span id="dateSubline">잠시만 기다려 주세요</span>
+        </button>
+        <input id="datePicker" class="visually-hidden" type="date" aria-label="급식 날짜 선택" />
+        <button class="round-button" id="nextDay" type="button" aria-label="다음 날짜">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        </button>
+      </div>
+
+      <div class="week-strip" id="weekStrip" role="list" aria-label="주간 급식 날짜"></div>
+
+      <section class="content-card" id="contentCard" aria-live="polite">
+        <div class="loading-state" id="loadingState">
+          <div class="bowl-loader" aria-hidden="true"><span></span><span></span><span></span></div>
+          <p>오늘의 메뉴를 불러오고 있어요</p>
+        </div>
+
+        <div class="meal-state hidden" id="mealState">
+          <div class="section-heading">
+            <div>
+              <span class="meal-label" id="mealType">중식</span>
+              <h2>오늘의 메뉴</h2>
+            </div>
+            <span class="calorie-chip hidden" id="calorieChip"></span>
+          </div>
+          <ol class="menu-list" id="menuList"></ol>
+          <details class="allergy-note">
+            <summary>알레르기 번호 안내</summary>
+            <p>1 난류 · 2 우유 · 3 메밀 · 4 땅콩 · 5 대두 · 6 밀 · 7 고등어 · 8 게 · 9 새우 · 10 돼지고기 · 11 복숭아 · 12 토마토 · 13 아황산류 · 14 호두 · 15 닭고기 · 16 쇠고기 · 17 오징어 · 18 조개류 · 19 잣</p>
+          </details>
+        </div>
+
+        <div class="empty-state hidden" id="emptyState">
+          <div class="empty-illustration" aria-hidden="true">☁️</div>
+          <h2>등록된 급식이 없어요</h2>
+          <p id="emptyMessage">주말이나 방학, 학교 일정에 따라 급식이 없을 수 있어요.</p>
+          <button class="primary-button" id="goTodayButton" type="button">오늘로 돌아가기</button>
+        </div>
+
+        <div class="error-state hidden" id="errorState">
+          <div class="empty-illustration" aria-hidden="true">🌧️</div>
+          <h2>급식 정보를 불러오지 못했어요</h2>
+          <p id="errorMessage">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p>
+          <button class="primary-button" id="retryButton" type="button">다시 불러오기</button>
+        </div>
+      </section>
+
+      <footer class="widget-footer">
+        <div>
+          <span class="source-badge">공공데이터</span>
+          <span>나이스 교육정보 개방 포털 제공</span>
+        </div>
+        <button id="todayButton" type="button">오늘 보기</button>
+      </footer>
+    </section>
+  </main>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
