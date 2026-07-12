@@ -124,21 +124,15 @@ function getVotePanelData() {
  * 급식 API 재조회 → Google Form 선택지 변경 → 드롭다운/차트 데이터 반환을 한 번에 처리합니다.
  */
 function manualSyncMealWidget() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  const sync = syncTodayMealToForm();
 
-  try {
-    const sync = syncTodayMealToForm();
-    return {
-      ok: true,
-      syncedAt: Utilities.formatDate(new Date(), EMBEDDED_VOTE_CONFIG.TIME_ZONE, 'HH:mm:ss'),
-      sync,
-      vote: getVotePanelData(),
-      dashboard: getDashboardData()
-    };
-  } finally {
-    lock.releaseLock();
-  }
+  return {
+    ok: true,
+    syncedAt: Utilities.formatDate(new Date(), EMBEDDED_VOTE_CONFIG.TIME_ZONE, 'HH:mm:ss'),
+    sync,
+    vote: getVotePanelData(),
+    dashboard: getDashboardData()
+  };
 }
 
 /**
