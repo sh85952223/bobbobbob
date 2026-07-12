@@ -35,7 +35,7 @@ function doGet() {
 }
 
 function getDashboardData() {
-  const context = getCurrentMealVoteContext_();
+  const context = getDashboardContext_();
   const ss = getConfiguredSpreadsheet_();
   const sheet = getConfiguredResponseSheet_(ss);
   const lastRow = sheet.getLastRow();
