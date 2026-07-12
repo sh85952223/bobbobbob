@@ -80,7 +80,6 @@ function getVotePanelData() {
   // 새 날짜가 되었지만 아직 오전 5시 전이면 이전 메뉴로 잘못 투표하지 않도록 잠시 닫습니다.
   if (
     hour < EMBEDDED_VOTE_CONFIG.DAILY_SWITCH_HOUR &&
-    storedTarget &&
     storedTarget !== scheduledContext.targetYmd
   ) {
     return {
