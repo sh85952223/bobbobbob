@@ -8,7 +8,10 @@ const MEAL_SYNC_CONFIG = Object.freeze({
   TRIGGER_HOUR: 6,
   TRIGGER_NEAR_MINUTE: 5,
   NEXT_MEAL_SEARCH_DAYS: 14,
-  NEIS_BASE_URL: 'https://open.neis.go.kr/hub/mealServiceDietInfo'
+  MEAL_PROXY_URL: 'https://bobbobbob.vercel.app/api/meal',
+  NEIS_BASE_URL: 'https://open.neis.go.kr/hub/mealServiceDietInfo',
+  REQUEST_RETRY_COUNT: 3,
+  REQUEST_RETRY_DELAY_MS: 1200
 });
 
 function setupMealFormSync() {
@@ -56,6 +59,7 @@ function previewTodayMealChoices() {
     date: context.targetYmd,
     dateLabel: context.dateLabel,
     mode: context.mode,
+    source: meal.source,
     items: meal.items,
     responseWindowStart: context.windowStartYmd,
     responseWindowEnd: context.windowEndYmd
@@ -134,6 +138,7 @@ function applyMealToForm_(context, meal) {
       MEAL_VOTE_WINDOW_START: context.windowStartYmd,
       MEAL_VOTE_WINDOW_END: context.windowEndYmd,
       MEAL_VOTE_MODE: context.mode,
+      MEAL_LAST_SYNC_SOURCE: meal.source || 'unknown',
       MEAL_LAST_SYNC_ITEMS: JSON.stringify(meal.items)
     }, false);
 
@@ -146,6 +151,7 @@ function applyMealToForm_(context, meal) {
         date: context.targetYmd,
         dateLabel: context.dateLabel,
         mode: context.mode,
+        source: meal.source,
         hasMeal: false,
         items: [],
         formAcceptingResponses: false
@@ -166,6 +172,7 @@ function applyMealToForm_(context, meal) {
       date: context.targetYmd,
       dateLabel: context.dateLabel,
       mode: context.mode,
+      source: meal.source,
       hasMeal: true,
       items: meal.items,
       responseWindowStart: context.windowStartYmd,
@@ -177,8 +184,69 @@ function applyMealToForm_(context, meal) {
   }
 }
 
+/**
+ * 급식 조회 순서
+ * 1) 기존 Vercel 급식 API: 나이스 API 키/캐시 설정을 재사용
+ * 2) 실패 시 나이스 원본 API 직접 호출
+ */
 function fetchMealForDate_(ymd) {
   validateYmd_(ymd);
+  const errors = [];
+
+  try {
+    return fetchMealFromProxy_(ymd);
+  } catch (error) {
+    errors.push(`Vercel API: ${error.message}`);
+    console.warn(errors[errors.length - 1]);
+  }
+
+  try {
+    return fetchMealFromNeis_(ymd);
+  } catch (error) {
+    errors.push(`나이스 직접 호출: ${error.message}`);
+    console.warn(errors[errors.length - 1]);
+  }
+
+  throw new Error(`급식 정보를 불러오지 못했습니다. ${errors.join(' / ')}`);
+}
+
+function fetchMealFromProxy_(ymd) {
+  const year = Number(ymd.slice(0, 4));
+  const month = Number(ymd.slice(4, 6));
+  const isoDate = `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+  const url = `${MEAL_SYNC_CONFIG.MEAL_PROXY_URL}?year=${year}&month=${month}`;
+  const data = fetchJsonWithRetry_(url, 'Vercel 급식 API');
+
+  if (!data || data.ok !== true) {
+    throw new Error(data && data.message ? data.message : '정상 응답이 아닙니다.');
+  }
+
+  const entry = data.meals && data.meals[isoDate];
+  if (!entry) {
+    return {
+      date: ymd,
+      mealType: '중식',
+      source: 'vercel-proxy',
+      items: []
+    };
+  }
+
+  const items = Array.isArray(entry.items)
+    ? entry.items
+        .map((item) => typeof item === 'string' ? item : item && item.name)
+        .map(cleanDishName_)
+        .filter(Boolean)
+    : [];
+
+  return {
+    date: ymd,
+    mealType: entry.mealType ? String(entry.mealType) : '중식',
+    source: 'vercel-proxy',
+    items: [...new Set(items)]
+  };
+}
+
+function fetchMealFromNeis_(ymd) {
   const params = {
     Type: 'json',
     pIndex: 1,
@@ -195,22 +263,27 @@ function fetchMealForDate_(ymd) {
     .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
     .join('&');
 
-  const response = UrlFetchApp.fetch(`${MEAL_SYNC_CONFIG.NEIS_BASE_URL}?${query}`, {
-    muteHttpExceptions: true,
-    headers: { Accept: 'application/json' }
-  });
+  const data = fetchJsonWithRetry_(
+    `${MEAL_SYNC_CONFIG.NEIS_BASE_URL}?${query}`,
+    '나이스 급식 API'
+  );
 
-  if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) {
-    throw new Error(`나이스 급식 API HTTP ${response.getResponseCode()}`);
+  if (data && data.RESULT && data.RESULT.CODE === 'INFO-200') {
+    return { date: ymd, mealType: '중식', source: 'open-neis', items: [] };
+  }
+  if (data && data.RESULT && data.RESULT.MESSAGE) {
+    throw new Error(data.RESULT.MESSAGE);
   }
 
-  const data = JSON.parse(response.getContentText('UTF-8'));
-  const service = data.mealServiceDietInfo;
+  const service = data && data.mealServiceDietInfo;
   const rowBlock = Array.isArray(service)
     ? service.find((block) => Array.isArray(block.row))
     : null;
   const rows = rowBlock ? rowBlock.row : [];
-  const lunchRows = rows.filter((row) => String(row.MMEAL_SC_CODE || '') === '2' || String(row.MMEAL_SC_NM || '').includes('중식'));
+  const lunchRows = rows.filter((row) =>
+    String(row.MMEAL_SC_CODE || '') === '2' ||
+    String(row.MMEAL_SC_NM || '').includes('중식')
+  );
   const selectedRows = lunchRows.length ? lunchRows : rows;
   const items = [];
 
@@ -224,9 +297,77 @@ function fetchMealForDate_(ymd) {
 
   return {
     date: ymd,
-    mealType: selectedRows[0] && selectedRows[0].MMEAL_SC_NM ? String(selectedRows[0].MMEAL_SC_NM) : '중식',
+    mealType: selectedRows[0] && selectedRows[0].MMEAL_SC_NM
+      ? String(selectedRows[0].MMEAL_SC_NM)
+      : '중식',
+    source: 'open-neis',
     items: [...new Set(items)]
   };
+}
+
+function fetchJsonWithRetry_(url, sourceName) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= MEAL_SYNC_CONFIG.REQUEST_RETRY_COUNT; attempt += 1) {
+    try {
+      const response = UrlFetchApp.fetch(url, {
+        method: 'get',
+        muteHttpExceptions: true,
+        followRedirects: true,
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      const status = response.getResponseCode();
+      const body = response.getContentText('UTF-8');
+
+      if (status >= 200 && status < 300) {
+        try {
+          return JSON.parse(body);
+        } catch (error) {
+          throw new Error(`JSON 해석 실패: ${body.slice(0, 180)}`);
+        }
+      }
+
+      lastError = new Error(`HTTP ${status}${body ? ` · ${body.slice(0, 180)}` : ''}`);
+      const retryable = status === 429 || status >= 500;
+      if (!retryable || attempt === MEAL_SYNC_CONFIG.REQUEST_RETRY_COUNT) break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === MEAL_SYNC_CONFIG.REQUEST_RETRY_COUNT) break;
+    }
+
+    Utilities.sleep(MEAL_SYNC_CONFIG.REQUEST_RETRY_DELAY_MS * attempt);
+  }
+
+  throw new Error(`${sourceName} 호출 실패: ${lastError ? lastError.message : '알 수 없는 오류'}`);
+}
+
+/** 두 데이터 원본을 각각 시험하고 실행 로그에 결과를 남깁니다. */
+function diagnoseMealApi() {
+  const context = getCurrentMealVoteContext_();
+  const result = {
+    targetDate: context.targetYmd,
+    proxy: null,
+    neis: null
+  };
+
+  try {
+    result.proxy = fetchMealFromProxy_(context.targetYmd);
+  } catch (error) {
+    result.proxy = { ok: false, error: error.message };
+  }
+
+  try {
+    result.neis = fetchMealFromNeis_(context.targetYmd);
+  } catch (error) {
+    result.neis = { ok: false, error: error.message };
+  }
+
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 function cleanDishName_(value) {
